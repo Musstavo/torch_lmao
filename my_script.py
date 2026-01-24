@@ -55,4 +55,17 @@ for epoch in range(epochs):
 model.eval()
 with torch.inference_mode():
     y_pred = model(X_test)
-print(y_pred)
+MODEL_PATH = Path("models")
+MODEL_PATH.mkdir(parents=True, exist_ok=True)
+MODEL_NAME = "01_forreal.pth"
+MODEL_SAVE_PATH = MODEL_PATH / MODEL_NAME
+loaded_model = LinearRegression()
+loaded_model.load_state_dict(torch.load(MODEL_SAVE_PATH))
+loaded_model.to(device)
+
+
+# Evaluate loaded model
+loaded_model.eval()
+with torch.inference_mode():
+    loaded_model_preds = loaded_model(X_test)
+print(test_pred == loaded_model_preds)
