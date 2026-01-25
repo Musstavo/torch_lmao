@@ -8,7 +8,7 @@ from pathlib import Path
 import requests
 
 torch.manual_seed(42)
-torch.cuda.manual_seed(42)
+
 if Path("helper_functions.py").is_file():
     pass
 else:
@@ -26,8 +26,6 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 
 X, y = make_circles(n_samples, noise=0.03, random_state=42)
 
-circles = pd.DataFrame({"X1": X[:, 0], "X2": X[:, 1], "label": y})
-
 X = torch.from_numpy(X).type(torch.float)
 y = torch.from_numpy(y).type(torch.float)
 
@@ -41,12 +39,14 @@ y_train = y_train.to(device)
 y_test = y_test.to(device)
 
 
-class CircleModel(nn.Module):
+class LinearModel(nn.Module):
     def __init__(self):
         super().__init__()
         self.layer_1 = nn.Linear(in_features=2, out_features=10)
         self.layer_2 = nn.Linear(in_features=10, out_features=10)
-        self.layer_3 = nn.Linear(in_features=10, out_features=1)
+        self.layer_3 = nn.Linear(in_features=10, out_features=10)
+        self.layer_4 = nn.Linear(in_features=10, out_features=1)
+
         self.relu = nn.ReLU()
 
     def forward(self, x):
@@ -55,70 +55,58 @@ class CircleModel(nn.Module):
         x = self.layer_2(x)
         x = self.relu(x)
         x = self.layer_3(x)
+        x = self.layer_4(x)
         return x
 
 
-model_0 = CircleModel().to(device)
+model = LinearModel().to(device)
+
 loss_fn = nn.BCEWithLogitsLoss()
+optimizer = torch.optim.SGD(model.parameters(), 0.1)
 
-optimizer = torch.optim.SGD(params=model_0.parameters(), lr=0.1)
 
-
-def accuracy_fn(y_true, y_pred):
+def accuracy(y_true, y_pred):
     correct = torch.eq(y_true, y_pred).sum().item()
     acc = (correct / len(y_pred)) * 100
     return acc
 
 
-epochs = 2000
+epochs = 1000
 for epoch in range(epochs):
-    model_0.train()
-    y_logits = model_0(X_train).squeeze()
-    y_pred = torch.round(torch.sigmoid(y_logits))
-
-    loss = loss_fn(y_logits, y_train)
-    acc = accuracy_fn(y_train, y_pred)
+    model.train()
+    y_train_logits = model(X_train).squeeze()
+    y_train_pred = torch.round(torch.sigmoid(y_train_logits))
+    loss = loss_fn(y_train_logits, y_train)
+    acc = accuracy(y_train, y_train_pred)
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
 
-    model_0.eval()
+    model.eval()
     with torch.inference_mode():
-        test_logits = model_0(X_test).squeeze()
-        test_pred = torch.round(torch.sigmoid(test_logits))
-        test_loss = loss_fn(test_logits, y_test)
-        test_acc = accuracy_fn(y_test, test_pred)
+        y_test_logits = model(X_test).squeeze()
+        y_test_pred = torch.round(torch.sigmoid(y_test_logits))
+        test_loss = loss_fn(y_test_logits, y_test)
+        test_acc = accuracy(y_test, y_test_pred)
+#
 #     if epoch % 100 == 0:
 #         print(
 #             f"Epoch: {epoch} | Loss: {loss:.5f}, Accuracy: {acc:.2f}% | Test loss: {test_loss:.5f}, Test acc: {test_acc:.2f}%"
 #         )
-#
-# plt.figure(figsize=(12, 6))
-# plt.subplot(1, 2, 1)
-# plt.title("Train")
-# plot_decision_boundary(model_0, X_train, y_train)
-#
-# plt.subplot(1, 2, 2)
-# plt.title("Test")
-# plot_decision_boundary(model_0, X_test, y_test)
-#
-# plt.show()
-# test lmao
-# 1. Create a new point (outside the circle)
-new_x = torch.tensor([[0.8, 0.8]]).to(device)
 
-# 2. Put model in evaluation mode (important!)
+new_x = torch.tensor([[0.3, 0.3]]).to(device)
+
 model.eval()
-
 with torch.inference_mode():
-    # 3. Get the raw guess (logit)
     new_logit = model(new_x)
 
-    # 4. Turn into probability
     new_prob = torch.sigmoid(new_logit)
-
-    # 5. Turn into a hard 0 or 1
     new_pred = torch.round(new_prob)
 
 print(f"Coordinate: {new_x.tolist()}")
-print(f"Prediction: {new_pred.item()} (1 = Blue/Outer, 0 = Red/Inner)")
+print(f"Prediction: {new_pred.item()} (1 = Blue/Inner, 0 = Red/Outer)")
+plt.figure(figsize=(6, 6))
+plot_decision_boundary(model, X_test, y_test)
+plt.scatter(0.3, 0.3, c="green", s=200, marker="x", label="New Point")
+plt.legend()
+plt.show()
