@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader, TensorDataset
 from tqdm.auto import tqdm
+import numpy as py
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
