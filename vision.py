@@ -9,6 +9,8 @@ from helper_functions import accuracy_fn
 from timeit import default_timer as timer
 from tqdm.auto import tqdm
 import random
+from mlxtend.plotting import plot_confusion_matrix
+from torchmetrics import ConfusionMatrix
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -40,7 +42,7 @@ for i in range(1, rows * cols + 1):
 BATCH_SIZE = 32
 
 train_dataloader = DataLoader(train_data, batch_size=BATCH_SIZE, shuffle=True)
-test_dataloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=True)
+test_dataloader = DataLoader(test_data, batch_size=BATCH_SIZE, shuffle=False)
 
 
 class FashionMNIST(nn.Module):
@@ -225,31 +227,31 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
 )
 torch.manual_seed(42)
 train_time_start_model_2 = timer()
-# epochs = 50
-# for epoch in tqdm(range(epochs)):
-#     print(f"Epoch: {epoch}\n---------")
-#     train_step(
-#         data_loader=train_dataloader,
-#         model=model_2,
-#         loss_fn=loss_fn,
-#         optimizer=optimizer,
-#         accuracy_fn=accuracy_fn,
-#         device=device,
-#     )
-#     test_loss, test_acc = test_step(
-#         data_loader=test_dataloader,
-#         model=model_2,
-#         loss_fn=loss_fn,
-#         accuracy_fn=accuracy_fn,
-#         device=device,
-#     )
-#     print(f"Current LR: {optimizer.param_groups[0]['lr']}")
-#     scheduler.step(test_loss)
+epochs = 50
+for epoch in tqdm(range(epochs)):
+    print(f"Epoch: {epoch}\n---------")
+    train_step(
+        data_loader=train_dataloader,
+        model=model_2,
+        loss_fn=loss_fn,
+        optimizer=optimizer,
+        accuracy_fn=accuracy_fn,
+        device=device,
+    )
+    test_loss, test_acc = test_step(
+        data_loader=test_dataloader,
+        model=model_2,
+        loss_fn=loss_fn,
+        accuracy_fn=accuracy_fn,
+        device=device,
+    )
+    print(f"Current LR: {optimizer.param_groups[0]['lr']}")
+    scheduler.step(test_loss)
 
 train_time_end_model_2 = timer()
-# total_train_time_model_2 = print_train_time(
-#     start=train_time_start_model_2, end=train_time_end_model_2, device=device
-# )
+total_train_time_model_2 = print_train_time(
+    start=train_time_start_model_2, end=train_time_end_model_2, device=device
+)
 
 
 def predict_single_image(model, dataset, classes):
@@ -282,4 +284,26 @@ def predict_single_image(model, dataset, classes):
 
 
 class_names = train_data.classes
-predict_single_image(model_2, test_data, class_names)
+
+y_preds = []
+model_2.eval()
+with torch.inference_mode():
+    for X, y in tqdm(test_dataloader, desc="Making predictions"):
+        X, y = X.to(device), y.to(device)
+        y_logits = model_2(X)
+        y_pred = torch.softmax(y_logits, dim=1).argmax(dim=1)
+        y_preds.append(y_pred.cpu())
+
+y_pred_tensor = torch.cat(y_preds)
+
+confmat = ConfusionMatrix(
+    num_classes=len(class_names),
+    task="multiclass",
+)
+
+confmat_tensor = confmat(preds=y_pred_tensor, target=test_data.targets)
+
+fig, ax = plot_confusion_matrix(
+    conf_mat=confmat_tensor.numpy(), class_names=class_names, figsize=(10, 7)
+)
+plt.show()
