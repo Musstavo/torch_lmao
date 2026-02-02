@@ -41,7 +41,7 @@ def batch_generator(images, labels, batch_size, shuffle):
 def forward_linear(x, shape):  # the shape can be (784, 128) 784 pixels and 128 rows
     bias = np.zeros(shape)
     weight = np.random.uniform(-0.1, 0.1, size=shape)
-    return x * weight + bias
+    return np.dot(prev, W) + b
 
 
 def softmax(logits):
@@ -56,3 +56,11 @@ def cross_entropy_loss(predictions, targets):
     negative_log_likelihoods = -np.log(correct_confidences)
     loss = np.sum(negative_log_likelihoods) / num_samples
     return loss
+
+
+def linear_backward(dZ2, A1, W2):
+    m = A1.shape[0]
+    dW2 = (1 / m) * np.dot(A1.T, dZ2)
+    db2 = (1 / m) * np.sum(dZ2)
+    dZ1 = np.dot(dZ2, W.T)
+    return dZ1, dW2, db2
