@@ -62,5 +62,7 @@ def linear_backward(dZ2, A1, W2):
     m = A1.shape[0]
     dW2 = (1 / m) * np.dot(A1.T, dZ2)
     db2 = (1 / m) * np.sum(dZ2)
-    dZ1 = np.dot(dZ2, W.T)
+    dZ1 = np.dot(dZ2, W2.T)
     return dZ1, dW2, db2
+
+
