@@ -17,3 +17,8 @@ build/
 
 # Environment variables (Sensitive data!)
 .env
+
+# data for liver segmentation
+data/
+*.nii
+*.nii.gz
