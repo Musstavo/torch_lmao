@@ -1,7 +1,7 @@
 import os
 import glob
 from natsort import natsorted
-import tqdm
+import tqdm.auto import tqdm
 import torch
 import random
 import numpy as np
@@ -97,6 +97,12 @@ val_transforms = Compose(
     [
         LoadImaged(keys=["image", "label"]),
         EnsureChannelFirstd(keys=["image", "label"]),
+        Orientationd(keys=["image", "label"], axcodes="RAS"),
+        Spacingd(
+            keys=["image", "label"],
+            pixdim=(1.5, 1.5, 2.0),
+            mode=("bilinear", "nearest"),
+        ),
         ScaleIntensityRanged(
             keys=["image"],
             a_min=-90,
@@ -106,17 +112,11 @@ val_transforms = Compose(
             clip=True,
         ),
         CropForegroundd(keys=["image", "label"], source_key="image"),
-        Orientationd(keys=["image", "label"], axcodes="RAS"),
-        Spacingd(
-            keys=["image", "label"],
-            pixdim=(1.5, 1.5, 2.0),
-            mode=("bilinear", "nearest"),
-        ),
     ]
 )
 
 train_ds = Dataset(data=train_files, transform=train_transforms)
-trian_loader = DataLoader(train_ds, batch_size=2, shuffle=True, num_workers=4)
+train_loader = DataLoader(train_ds, batch_size=2, shuffle=True, num_workers=4)
 
 val_ds = Dataset(data=val_files, transform=val_transforms)
 val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=4)
@@ -124,7 +124,7 @@ val_loader = DataLoader(val_ds, batch_size=1, shuffle=False, num_workers=4)
 model = UNet(
     spatial_dims=3,
     in_channels=1,
-    out_channels=2,
+    out_channels=3,
     channels=(16, 32, 64, 128, 256),
     strides=(2, 2, 2, 2),
     num_res_units=2,
@@ -135,7 +135,7 @@ loss_fn = DiceLoss(to_onehot_y=True, softmax=True)
 optimizer = torch.optim.AdamW(model.parameters(), lr=1e-4, weight_decay=1e-5)
 dice_metric = DiceMetric(include_background=False)
 
-epochs = 100
+epochs = 300
 val_interval = 5
 best_metric = -1
 best_metric_epoch = -1
@@ -157,7 +157,7 @@ for epoch in tqdm(range(epochs)):
         images, labels = batch_data["image"].to(device), batch_data["label"].to(device)
 
         optimizer.zero_grad()
-        preds = model(inputs)
+        preds = model(images)
         loss = loss_fn(preds, labels)
         loss.backward()
         optimizer.step()
@@ -177,7 +177,7 @@ for epoch in tqdm(range(epochs)):
         with torch.inference_mode():
             for val_data in val_loader:
                 val_images, val_labels = (
-                    val_data["images"].to(device),
+                    val_data["image"].to(device),
                     val_data["label"].to(device),
                 )
             region_of_interest_size = (96, 96, 96)
@@ -188,3 +188,34 @@ for epoch in tqdm(range(epochs)):
             )
             val_preds = [post_pred(i) for i in decollate_batch(val_preds)]
             val_labels = [post_label(i) for i in decollate_batch(val_labels)]
+
+            dice_metric(y_pred=val_preds, y=val_labels)
+
+        metric = dice_metric.aggregate().item()
+        dice_metric.reset()
+        metric_values.append(metric)
+
+        if metric > best_metric:
+            best_metric = metric
+            best_metric_epoch = epoch + 1
+            torch.save(model.state_dict(), "best_metric_model.pth")
+        print(
+            f"current epoch: {epoch + 1} | current mean dice: {metric:.4f}"
+            f"\nbest mean dice: {best_metric:.4f} "
+            f"at epoch: {best_metric_epoch}"
+        )
+
+print("train", (12, 6))
+plt.subplot(1, 2, 1)
+plt.title("Epoch Average Loss")
+x = [i + 1 for i in range(len(epoch_loss_values))]
+y = epoch_loss_values
+plt.xlabel("epoch")
+plt.plot(x, y)
+plt.subplot(1, 2, 2)
+plt.title("Val Mean Dice")
+x = [val_interval * (i + 1) for i in range(len(metric_values))]
+y = metric_values
+plt.xlabel("epoch")
+plt.plot(x, y)
+plt.show()
